@@ -5,7 +5,7 @@ const MAX_CHARS = 12000;
 
 export async function defuddleExtract(html, sourceUrl) {
   const { document } = parseHTML(html);
-  const result = await Defuddle(document, sourceUrl);
+  const result = await Defuddle(document, sourceUrl, { includeReplies: false });
   if (!result) {
     console.warn(`defuddle returned null for ${sourceUrl}`);
     return '';
