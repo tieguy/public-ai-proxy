@@ -1,5 +1,5 @@
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
-import { defuddleExtract } from './extractor-defuddle.mjs';
+import { defuddleExtract } from "./extractor-defuddle.mjs";
 
 // ===== Rate limit settings =====
 const RATE_LIMIT = 20;        // requests
