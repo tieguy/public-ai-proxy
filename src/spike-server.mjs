@@ -1,7 +1,6 @@
 import { defuddleExtract } from './extractor-defuddle.mjs';
 
-const USER_AGENT =
-  'extraction-experiment-spike/1.0 (https://github.com/alex-o-748/public-ai-proxy)';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
 export default {
   async fetch(request) {
@@ -15,20 +14,27 @@ export default {
       );
     }
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
     let upstream;
     try {
-      upstream = await fetch(targetUrl, { headers: { 'User-Agent': USER_AGENT } });
+      upstream = await fetch(targetUrl, {
+        signal: controller.signal,
+        headers: { 'User-Agent': USER_AGENT },
+      });
     } catch (err) {
+      clearTimeout(timer);
       return new Response(
         JSON.stringify({ error: `upstream fetch failed: ${err.message}` }),
-        { status: 502, headers: { 'Content-Type': 'application/json' } },
+        { headers: { 'Content-Type': 'application/json' } },
       );
     }
+    clearTimeout(timer);
 
     if (!upstream.ok) {
       return new Response(
         JSON.stringify({ error: `upstream returned ${upstream.status}` }),
-        { status: 502, headers: { 'Content-Type': 'application/json' } },
+        { headers: { 'Content-Type': 'application/json' } },
       );
     }
 
