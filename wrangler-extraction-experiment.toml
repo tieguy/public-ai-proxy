@@ -1,0 +1,4 @@
+name = "publicai-proxy-extraction-experiment"
+main = "src/spike-server.mjs"
+compatibility_date = "2024-01-14"
+compatibility_flags = ["nodejs_compat"]
