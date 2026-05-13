@@ -1,4 +1,5 @@
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
+import { classifyBody } from "./body-classifier.mjs";
 
 // ===== Rate limit settings =====
 const RATE_LIMIT = 20;        // requests
@@ -221,8 +222,26 @@ export default {
 
           const html = await response.text();
           const content = extractText(html);
+          const classification = classifyBody(content);
 
-          return new Response(JSON.stringify({ content }), {
+          if (!classification.usable) {
+              // Short-circuit: the body is structurally bad (Wayback chrome,
+              // CSS/JSON-LD leak, anti-bot challenge, etc.). Downstream callers
+              // should treat this as "Source unavailable" without invoking an
+              // LLM. See test/body-classifier.test.mjs for the catalog of cases.
+              return new Response(JSON.stringify({
+                  content: '',
+                  extractionStatus: 'body_unusable',
+                  bodyUsableReason: classification.reason,
+              }), {
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+              });
+          }
+
+          return new Response(JSON.stringify({
+              content,
+              extractionStatus: 'ok',
+          }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
 

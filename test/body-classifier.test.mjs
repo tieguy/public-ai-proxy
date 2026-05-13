@@ -1,0 +1,124 @@
+// Regression tests for src/body-classifier.mjs.
+//
+// Each fixture is a real Defuddle output from the combined-integration
+// benchmark where both Sonnet 4.5 and Opus 4.7 returned "Source unavailable"
+// against a GT of "Not supported" — i.e., cases the classifier should catch
+// so the pipeline returns SU mechanically and the LLM never has to guess.
+
+import { strict as assert } from 'node:assert';
+import { classifyBody } from '../src/body-classifier.mjs';
+
+const FIXTURES = [
+  // ===== Unusable bodies =====
+  {
+    id: 'row_20: Wayback wrapper for WaPo article',
+    expected: { usable: false, reason: 'wayback_chrome' },
+    text: 'The Wayback Machine - https://web.archive.org/web/20100825072233/http://www.washingtonpost.com/wp-dyn/content/article/2010/04/30/AR2010043001667.html Archive | Biography | RSS Feed | Opinions Home Arizona law\'s foes are using the real immigration scare tactics',
+  },
+  {
+    id: 'row_94: Wayback wrapper for Croydon Minster',
+    expected: { usable: false, reason: 'wayback_chrome' },
+    text: 'The Wayback Machine - https://web.archive.org/web/20120324190450/http://www.croydonminster.org/about-us A Living Past and a Growing Future If you want to help us support Croydon Minster, you can donate online through JustGiving.',
+  },
+  {
+    id: 'row_17: Wayback captures-only page (PDF didn\'t extract)',
+    expected: { usable: false, reason: 'wayback_chrome' },
+    text: '45 captures 05 Feb 2021 - 28 Jan 2026 Aug SEP Oct 10 2021 2022 2023 success fail About this capture COLLECTED BY Collection: Wikipedia Eventstream TIMESTAMPS The Wayback Machine - https://web.archive.org/web/20220910221959/https://www2.census.gov/library/publications/decennial/1900/century-of-growth',
+  },
+  {
+    id: 'row_64: Wayback collection-metadata-only page',
+    expected: { usable: false, reason: 'wayback_chrome' },
+    text: 'Aug SEP Oct 24 2022 2023 2024 COLLECTED BY Collection: Common Crawl Web crawl data from Common Crawl. The Wayback Machine - http://web.archive.org/web/20230924034658/https://almeezan.qa/LawArticles.aspx',
+  },
+  {
+    id: 'row_22: Internet Archive HTTP-301 redirect notice',
+    expected: { usable: false, reason: 'wayback_redirect_notice' },
+    text: 'About Blog Events Projects Help Donate Donate icon An illustration of a heart shape Contact Jobs Volunteer Loading... http://seattletimes.nwsource.com/html/nationworld/2003265600_impghistory20.html | 20:20:25 October 15, 2012 Got an HTTP 301 response at crawl time Redirecting to... http://seattletimes.com/html/nationworld/2003265600_impghistory20.html',
+  },
+  {
+    id: 'row_70: JSON-LD schema.org blob (el Heraldo)',
+    expected: { usable: false, reason: 'json_ld_leak' },
+    text: '{ "@context": "https://schema.org", "@type": "NewsArticle", "mainEntityOfPage": "https://www.elheraldo.hn/honduras/corte-apelaciones-admite-recurso-apelacion-alcalde-nasry-tito-asfura-corrupcion-GXEH1467634", "name": "Sala Penal ordena anular acciones penales contra Nasry \'Tito\' Asfura"',
+  },
+  {
+    id: 'row_146: CSS stylesheet content (almerja.com)',
+    expected: { usable: false, reason: 'css_leak' },
+    text: '#header{ position: sticky; top: 0; z-index: 10; background-color: rgba(0961511); border-bottom: 3px solid #008ec5; padding: 0px 20px; display: flex; align-items: center; justify-content:space-around; color: #fff; user-select: none; } #header #h_r{ display: flex; align-items: center; padding: 5px; } #header #h_r p:nth-child(1){ width: 35px; height: 35px; background-color: #fff; border-radius: 50%; margin-left: 10px; display: flex; align-items: center; text-align: center; } #header #h_r p a{ display: flex; align-items: center; }',
+  },
+  {
+    id: 'row_134: Amazon page rendered as footer-only stub',
+    expected: { usable: false, reason: 'amazon_stub' },
+    text: 'Click the button below to continue shopping Conditions of Use & Sale Privacy Notice © 1996-2025, Amazon.com, Inc. or its affiliates',
+  },
+  {
+    id: 'row_92: Author contact page (too short)',
+    expected: { usable: false, reason: 'short_body' },
+    text: 'CB-Forrest-Author-Logo Reach out to C.B. Forrest on Twitter – @cbforrest. Get in Touch Connect Please follow or message C.B. Forrest on Twitter. Twitter Hours Direct message replies on Twitter: Mon-Fri 09:00-19:00 Scroll to Top',
+  },
+  {
+    id: 'row_144: Anubis proof-of-work anti-bot challenge (eBird)',
+    expected: { usable: false, reason: 'anti_bot_challenge' },
+    text: 'Making sure you&#39;re not a bot! Loading... Why am I seeing this? You are seeing this because the administrator of this website has set up Anubis to protect the server against the scourge of AI companies aggressively scraping websites.',
+  },
+  // ===== Usable bodies — must NOT be flagged =====
+  {
+    id: 'row_189: Real Goodreads book description (short but substantive)',
+    expected: { usable: true, reason: 'ok' },
+    text: 'Jump to ratings and reviews Rate this book Marjane Satrapi Rate this book From the author of Persepolis, comes this illustrated fairy tale. Rose is one of three daughters of a rich merchant who always brings gifts for his girls from the market. One day Rose asks for the seed of a blue bean, but he fails to find one for her. She lets out a sigh in resignation, and her sigh attracts the Sigh, a mysterious being that brings the seed she desired to the merchant. But every debt has to be paid, and every gift has a price, and the Sigh returns a year later to take the merchant\'s daughter to a secret and distant palace.56 pages, Hardcover First published January 1, 2004',
+  },
+  {
+    id: 'row_125: Real Museo Novecento exhibition page',
+    expected: { usable: true, reason: 'ok' },
+    text: 'From 17 June to 2 November 2022 the Museo Novecento hosts Corrado Cagli. Copernican Artist, an exhibition curated by Eva Francioli, Francesca Neri and Stefania Rispoli. Exhibition Hours Museo Novecento With this new exhibition project, the Museo Novecento continues its activity of enhancing the artists present within the Florentine civic collections. A scientific project started in 2018 with the exhibition dedicated to Emilio Vedova and continued with monographs dedicated, among others, to Mirko Basaldella, Mario Mafai, Arturo Martini, of which a large number of works are present in the permanent collection.',
+  },
+  {
+    id: 'row_8: Real DHS statistical-table prose (long)',
+    expected: { usable: true, reason: 'ok' },
+    text: 'The is a compendium of tables that provide data on foreign nationals who are granted lawful permanent residence (i.e., immigrants who receive a "green card"), admitted as temporary nonimmigrants, granted asylum or refugee status, or are naturalized. The Yearbook also presents data on immigration enforcement actions, including apprehensions and arrests, removals, and returns. Family-Sponsored Preferences Type and class of admission Total Adjustments of Status New Arrivals Total, all immigrants 1183505 565427 618078 Family-sponsored preferences 238087 15116 222971',
+  },
+  {
+    id: 'row_98: Real Forbes article about Zogby and housing trends',
+    expected: { usable: true, reason: 'ok' },
+    text: 'This article is more than 8 years old. Cabin in woods Cara Fuller, Unsplash Back in 2008 John Zogby, author, founder of the Zogby International Poll and a fellow Forbes.com contributor, predicted a seismic shift in American\'s aspirations, values and ideals in his book The Way We\'ll Be: The Zogby Report on the Transformation of the American Dream.',
+  },
+  // ===== Edge cases =====
+  {
+    id: 'edge: empty string',
+    expected: { usable: false, reason: 'short_body' },
+    text: '',
+  },
+  {
+    id: 'edge: null',
+    expected: { usable: false, reason: 'short_body' },
+    text: null,
+  },
+  {
+    id: 'edge: leading whitespace + short content',
+    expected: { usable: false, reason: 'short_body' },
+    text: '   \n\n  Brief contact page.   ',
+  },
+];
+
+let pass = 0;
+let fail = 0;
+const failures = [];
+for (const { id, expected, text } of FIXTURES) {
+  const got = classifyBody(text);
+  const ok = got.usable === expected.usable && got.reason === expected.reason;
+  if (ok) {
+    pass++;
+    console.log(`PASS  ${id}`);
+  } else {
+    fail++;
+    failures.push({ id, expected, got });
+    console.log(`FAIL  ${id}`);
+    console.log(`  expected: ${JSON.stringify(expected)}`);
+    console.log(`  got:      ${JSON.stringify(got)}`);
+  }
+}
+console.log(`\n${pass}/${FIXTURES.length} passing`);
+if (fail > 0) {
+  console.log('\nFailures summary:');
+  for (const f of failures) console.log(`  ${f.id}: expected ${f.expected.reason}, got ${f.got.reason}`);
+  process.exit(1);
+}
