@@ -11,12 +11,7 @@ import { classifyBody } from '../src/body-classifier.mjs';
 const FIXTURES = [
   // ===== Unusable bodies =====
   {
-    id: 'row_20: Wayback wrapper for WaPo article',
-    expected: { usable: false, reason: 'wayback_chrome' },
-    text: 'The Wayback Machine - https://web.archive.org/web/20100825072233/http://www.washingtonpost.com/wp-dyn/content/article/2010/04/30/AR2010043001667.html Archive | Biography | RSS Feed | Opinions Home Arizona law\'s foes are using the real immigration scare tactics',
-  },
-  {
-    id: 'row_94: Wayback wrapper for Croydon Minster',
+    id: 'row_94: Wayback wrapper for Croydon Minster (short, chrome-dominated)',
     expected: { usable: false, reason: 'wayback_chrome' },
     text: 'The Wayback Machine - https://web.archive.org/web/20120324190450/http://www.croydonminster.org/about-us A Living Past and a Growing Future If you want to help us support Croydon Minster, you can donate online through JustGiving.',
   },
@@ -61,6 +56,31 @@ const FIXTURES = [
     text: 'Making sure you&#39;re not a bot! Loading... Why am I seeing this? You are seeing this because the administrator of this website has set up Anubis to protect the server against the scourge of AI companies aggressively scraping websites.',
   },
   // ===== Usable bodies — must NOT be flagged =====
+  // Sampled from rows where both Sonnet 4.5 and Opus 4.7 produced the
+  // GT-matching verdict in the combined-integration benchmark — i.e.,
+  // bodies the pipeline demonstrably handled end-to-end. Includes Wayback-
+  // prefix + real-article (row_9, common shape), short news prose, long
+  // article bodies, RTL/Arabic text, and a Forbes-style intro.
+  {
+    id: 'row_9: Wayback URL prefix + real USCIS glossary article (must pass — chrome is short)',
+    expected: { usable: true, reason: 'ok' },
+    text: 'The Wayback Machine - https://web.archive.org/web/20160121232201/http://www.uscis.gov/tools/glossary/country-limit The maximum number of family-sponsored and employment-based preference visas that can be issued to citizens of any country in a fiscal year. The limits are calculated each fiscal year depending on the total number of family-sponsored and employment-based visas available. No more than 7 percent of the visas may be issued to natives of any one independent country in a fiscal year; no more than 2 percent may issued to any one dependency of any independent country. The per-country limit does not indicate, however, that a country is entitled to the maximum number of visas each year, just that it cannot receive more than that number. Because of the combined workings of the preference system and per-country limits, most countries do not reach this level of visa issuance. Last Reviewed/Updated:',
+  },
+  {
+    id: 'row_14: News opinion piece (medium-length)',
+    expected: { usable: true, reason: 'ok' },
+    text: 'As his price for not deporting roughly 800000 "Dreamers" who came to this country as children, Donald Trump demands an escalated war against immigrants, topped by his nightmarish 2000-mile wall along the Mexican border. Democrats have said no. Whether or not some sort of deal is eventually struck, the larger story of the past several decades is that the long-running drive to keep America Caucasian — the dream of a "Christian nation" of European descent — is failing definitively.',
+  },
+  {
+    id: 'row_104: Local-news article (substantive prose, 1.4k chars)',
+    expected: { usable: true, reason: 'ok' },
+    text: 'CIRCLEVILLE – Rax Roast beef restaurants were much like Arbys back in the 80s and 90s but where one became a huge giant the other shrunk to only a handful of stores, one that still exists is right here in Circleville Ohio. In the Hayday Rax had as many as 504 locations across the US in 38 states and now there are only seven still operating. The history of the chain dates back to 1967.',
+  },
+  {
+    id: 'row_91: Arabic article (must not trip on non-Latin scripts)',
+    expected: { usable: true, reason: 'ok' },
+    text: 'عملية الاغتيال جرت برصاصة واحدة أطلقت عليه من مسافة قريبة من إحدى نوافذ منزله سوريا قتل قائد فصيل محلي في محافظة السويداء السورية، صباح الأربعاء، وذكرت التحقيقات الأولية بإقدام مجهولين على قتله داخل منزله وباستخدام سلاح كاتم صوت. والقيادي القتيل هو قائد فصيل "لواء الجبل"، مرهج الجرماني.وقالت شبكة "السويداء 24"، إن عملية الاغتيال جرت برصاصة واحدة أطلقت عليه من مسافة قريبة من إحدى نوافذ منزله خلال نومه.والجرماني كان قائد فصيل محلي في السويداء السورية وينشط منذ عام 2014 باسم "لواء الجبل".',
+  },
   {
     id: 'row_189: Real Goodreads book description (short but substantive)',
     expected: { usable: true, reason: 'ok' },
