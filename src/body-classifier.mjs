@@ -17,6 +17,12 @@
 
 const SIGNATURE_LEN = 500;
 const SHORT_BODY_FLOOR = 300;
+// Upper length bound for "chrome-dominated" detectors. Above this, even if a
+// chrome marker is present at the top, we assume substantive content follows
+// (e.g., row_9: 912 chars of "The Wayback Machine - …" prefix + USCIS article).
+// Tuned conservatively to favor false negatives (let body through, LLM handles)
+// over false positives (real content discarded as unusable).
+const CHROME_LENGTH_CAP = 600;
 
 const PATTERNS = [
   {
@@ -53,9 +59,13 @@ const PATTERNS = [
   {
     reason: 'wayback_chrome',
     // Wayback Machine wrapper captured without the inner archived content.
+    // Fire only when the body is too short to contain substantive content
+    // after the chrome — a Wayback prefix on a long body indicates the real
+    // article follows (see row_9: 912 chars, USCIS glossary entry).
     // The id_-flag URL rewrite reduces incidence but doesn't eliminate it
     // (PDF-too-large, JS-only archives still produce chrome).
     test: (text) => {
+      if (text.length >= CHROME_LENGTH_CAP) return false;
       const head = text.slice(0, SIGNATURE_LEN);
       return (
         /^The Wayback Machine - https?:\/\//.test(head) ||
