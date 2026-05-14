@@ -1,7 +1,6 @@
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
 import { defuddleExtract } from "./extractor-defuddle.mjs";
 import { extractRelevantContent } from "./extract-relevant-content.mjs";
-import { classifyBody } from "./body-classifier.mjs";
 
 // ===== Rate limit settings =====
 const RATE_LIMIT = 20;        // requests
@@ -248,23 +247,6 @@ export default {
 
           const html = await response.text();
           const fullText = await defuddleExtract(html, targetUrl);
-          const classification = classifyBody(fullText);
-
-          if (!classification.usable) {
-              // Short-circuit: Defuddle's output is structurally bad (Wayback
-              // chrome, CSS/JSON-LD leak, anti-bot challenge, etc.). Downstream
-              // callers should treat this as "Source unavailable" without
-              // invoking an LLM. See test/body-classifier.test.mjs for the
-              // catalog of cases.
-              return new Response(JSON.stringify({
-                  content: '',
-                  extractionStatus: 'body_unusable',
-                  bodyUsableReason: classification.reason,
-              }), {
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-              });
-          }
-
           const out = extractRelevantContent(fullText, queryParam, EXTRACT_OPTS);
 
           return new Response(JSON.stringify({
@@ -272,7 +254,6 @@ export default {
               truncated: out.truncated,
               extractionStrategy: out.strategy,
               fullLength: out.fullLength,
-              extractionStatus: 'ok',
           }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
