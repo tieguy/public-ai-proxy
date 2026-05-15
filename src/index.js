@@ -1,5 +1,6 @@
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
 import { defuddleExtract } from "./extractor-defuddle.mjs";
+import { extractRelevantContent } from "./extract-relevant-content.mjs";
 
 // ===== Rate limit settings =====
 const RATE_LIMIT = 20;        // requests
@@ -151,6 +152,7 @@ export default {
     if (request.method === 'GET' && url.searchParams.has('fetch')) {
       const targetUrl = url.searchParams.get('fetch');
       const pageParam = url.searchParams.get('page'); // optional: specific page number (1-indexed)
+      const queryParam = url.searchParams.get('query'); // optional: claim text used to pick relevant excerpts
 
       // Basic validation
       if (!targetUrl || !targetUrl.startsWith('http')) {
@@ -208,10 +210,19 @@ export default {
               }
 
               const { text } = await extractPdfText(pdf, { mergePages: true, pages });
-              const content = text.replace(/\s+/g, ' ').trim().substring(0, 12000);
+              // Preserve newlines so the relevance extractor has paragraph
+              // boundaries to work with; only collapse runs of inline
+              // whitespace.
+              const cleanedText = text.replace(/[^\S\n]+/g, ' ')
+                                      .replace(/\n{3,}/g, '\n\n')
+                                      .trim();
+              const out = extractRelevantContent(cleanedText, queryParam, EXTRACT_OPTS);
 
               return new Response(JSON.stringify({
-                  content,
+                  content: out.text,
+                  truncated: out.truncated,
+                  extractionStrategy: out.strategy,
+                  fullLength: out.fullLength,
                   pdf: true,
                   totalPages: pdf.numPages,
                   ...(pageParam ? { page: parseInt(pageParam, 10) } : {}),
@@ -221,9 +232,20 @@ export default {
           }
 
           const html = await response.text();
-          const content = await defuddleExtract(html, targetUrl);
+          // Stack: Defuddle → query-aware extraction.
+          // Defuddle gives us article body text (replaces the prior regex-strip);
+          // extractRelevantContent then picks the most claim-relevant excerpts
+          // within the 12k budget. If queryParam is absent, extractRelevantContent
+          // falls back to the lead-only / lead+head+tail behavior on the cleaned text.
+          const fullText = await defuddleExtract(html, targetUrl);
+          const out = extractRelevantContent(fullText, queryParam, EXTRACT_OPTS);
 
-          return new Response(JSON.stringify({ content }), {
+          return new Response(JSON.stringify({
+              content: out.text,
+              truncated: out.truncated,
+              extractionStrategy: out.strategy,
+              fullLength: out.fullLength,
+          }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
 
@@ -357,3 +379,19 @@ export default {
     });
   }
 };
+
+// Tuning for extractRelevantContent. Total cap matches the prior 12k budget
+// so per-call token cost is unchanged. fallbackChars=12000 means a request
+// without a `query` param sees identical behavior to the pre-patch Worker
+// (modulo the upstream switch from regex-strip to Defuddle on the HTML→text step).
+const EXTRACT_OPTS = {
+  leadChars: 2500,
+  matchWindow: 600,
+  maxMatches: 8,
+  maxTotalChars: 12000,
+  fallbackChars: 12000,
+};
+
+// extractText (the prior regex-strip) was removed in the Defuddle merge —
+// Defuddle now produces the cleaned article text from HTML before
+// extractRelevantContent picks claim-relevant excerpts from it.
