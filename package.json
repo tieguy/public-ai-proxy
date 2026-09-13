@@ -17,5 +17,8 @@
     "defuddle": "^0.18.1",
     "linkedom": "^0.18.12",
     "unpdf": "^1.4.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.91.0"
   }
 }
